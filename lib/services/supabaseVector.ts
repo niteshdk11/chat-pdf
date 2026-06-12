@@ -155,6 +155,29 @@ export class SupabaseVectorService {
 
   async deleteDocument(documentId: string): Promise<void> {
     const supabase = await this.getClient();
+
+    // Delete embeddings first (cascade will handle chunks)
+    const { error: embeddingError } = await supabase
+      .from('document_embeddings')
+      .delete()
+      .in('chunk_id', (
+        await supabase
+          .from('document_chunks')
+          .select('id')
+          .eq('document_id', documentId)
+      ).data?.map((c: any) => c.id) || []);
+
+    if (embeddingError) console.error('Error deleting embeddings:', embeddingError);
+
+    // Delete chunks
+    const { error: chunkError } = await supabase
+      .from('document_chunks')
+      .delete()
+      .eq('document_id', documentId);
+
+    if (chunkError) console.error('Error deleting chunks:', chunkError);
+
+    // Delete document
     const { error } = await supabase
       .from('documents')
       .delete()

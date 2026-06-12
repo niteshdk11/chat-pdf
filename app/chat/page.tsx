@@ -5,18 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  Upload,
   Send,
-  FileText,
   MessageSquare,
   User,
   Bot,
   Trash2,
-  Download,
   ArrowLeft,
-  Loader2
+  Loader2,
+  FileText
 } from 'lucide-react';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   id: string;
@@ -26,13 +26,9 @@ interface Message {
 }
 
 export default function ChatPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [documentId, setDocumentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -43,102 +39,40 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = event.target.files?.[0];
-    if (uploadedFile) {
-      setFile(uploadedFile);
-      setIsProcessing(true);
-      const formData = new FormData();
-      formData.append('file', uploadedFile);
-
+  useEffect(() => {
+    // Load chat history on mount
+    const loadChatHistory = async () => {
       try {
         const token = localStorage.getItem('auth-token');
+        if (!token) return;
+
         const headers: HeadersInit = {};
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          headers,
-          body: formData,
-        });
-
-        const data = await response.json();
-
+        const response = await fetch('/api/chat/history', { headers });
         if (response.ok) {
-          setIsProcessing(false);
-          setDocumentId(data.documentId);
-          setMessages([{
-            id: '1',
-            role: 'assistant',
-            content: `Great! I've processed your document "${uploadedFile.name}". You can now ask me questions about the content. What would you like to know?`,
-            timestamp: new Date()
-          }]);
-        } else {
-          throw new Error(data.error || 'Failed to process file');
+          const data = await response.json();
+          const historyMessages = data.history.map((h: any) => ({
+            id: h.id,
+            role: h.role,
+            content: h.content,
+            timestamp: new Date(h.created_at),
+          }));
+          setMessages(historyMessages);
         }
       } catch (error) {
-        console.error(error);
-        setIsProcessing(false);
-        alert(error instanceof Error ? error.message : 'Failed to process file');
-        setFile(null);
+        console.error('Error loading chat history:', error);
       }
-    }
-  };
+    };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      setFile(droppedFile);
-      setIsProcessing(true);
-      const formData = new FormData();
-      formData.append('file', droppedFile);
-
-      try {
-        const token = localStorage.getItem('auth-token');
-        const headers: HeadersInit = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          headers,
-          body: formData,
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          setIsProcessing(false);
-          setDocumentId(data.documentId);
-          setMessages([{
-            id: '1',
-            role: 'assistant',
-            content: `Great! I've processed your document "${droppedFile.name}". You can now ask me questions about the content. What would you like to know?`,
-            timestamp: new Date()
-          }]);
-        } else {
-          throw new Error(data.error || 'Failed to process file');
-        }
-      } catch (error) {
-        console.error(error);
-        setIsProcessing(false);
-        alert(error instanceof Error ? error.message : 'Failed to process file');
-        setFile(null);
-      }
-    }
-  };
+    loadChatHistory();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !file) return;
+    if (!input.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -165,7 +99,6 @@ export default function ChatPage() {
         headers,
         body: JSON.stringify({
           message: input,
-          documentId: documentId,
         }),
       });
 
@@ -200,15 +133,7 @@ export default function ChatPage() {
 
   const clearChat = () => {
     setMessages([]);
-    setFile(null);
-    setDocumentId(null);
     setInput('');
-  };
-
-  const removeFile = () => {
-    setFile(null);
-    setDocumentId(null);
-    setMessages([]);
   };
 
   return (
@@ -218,10 +143,10 @@ export default function ChatPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <Link href="/">
+              <Link href="/upload">
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back
+                  Manage Documents
                 </Button>
               </Link>
               <div className="flex items-center space-x-2">
@@ -233,220 +158,123 @@ export default function ChatPage() {
                 </span>
               </div>
             </div>
-            {file && (
-              <div className="flex items-center space-x-2">
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
-                  <FileText className="h-3 w-3 mr-1" />
-                  {file.name}
-                </Badge>
-                <Button variant="ghost" size="sm" onClick={clearChat}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center space-x-2">
+              <Button variant="ghost" size="sm" onClick={clearChat}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear Chat
+              </Button>
+            </div>
           </div>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid lg:grid-cols-4 gap-8">
-          {/* Upload Section */}
-          <div className="lg:col-span-1">
-            <Card className="sticky top-24">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Upload className="h-5 w-5 mr-2" />
-                  Upload Document
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!file ? (
-                  <div
-                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 transition-colors"
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-sm text-gray-600 mb-2">
-                      Drag and drop your document here, or click to select
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      PDF, CSV, XLSX, or Markdown files, max 10MB
-                    </p>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,.csv,.xlsx,.md"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="bg-green-600 p-2 rounded">
-                            <FileText className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-green-800 truncate">
-                              {file.name}
-                            </p>
-                            <p className="text-sm text-green-600">
-                              {(file.size / (1024 * 1024)).toFixed(2)} MB
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={removeFile}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Card className="h-[calc(100vh-200px)] flex flex-col">
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center">
+              <MessageSquare className="h-5 w-5 mr-2" />
+              Chat with Your Documents
+            </CardTitle>
+          </CardHeader>
 
-                    {isProcessing && (
-                      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                        <div className="flex items-center space-x-3">
-                          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                          <div>
-                            <p className="font-medium text-blue-800">Processing PDF...</p>
-                            <p className="text-sm text-blue-600">
-                              Analyzing document content
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Different Document
-                    </Button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,.csv,.xlsx,.md"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Chat Section */}
-          <div className="lg:col-span-3">
-            <Card className="h-[calc(100vh-200px)] flex flex-col">
-              <CardHeader className="border-b">
-                <CardTitle className="flex items-center">
-                  <MessageSquare className="h-5 w-5 mr-2" />
-                  Chat with PDF
-                </CardTitle>
-              </CardHeader>
-
-              <CardContent className="flex-1 p-0 overflow-hidden">
-                {!file ? (
+          <CardContent className="flex-1 p-0 overflow-hidden">
+            <div className="flex flex-col flex-1 h-full">
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-full">
+                {messages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
                       <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
-                        <FileText className="h-8 w-8 text-white" />
+                        <MessageSquare className="h-8 w-8 text-white" />
                       </div>
-                      <h3 className="text-xl font-semibold mb-2">Upload a PDF to get started</h3>
+                      <h3 className="text-xl font-semibold mb-2">Start a conversation</h3>
                       <p className="text-gray-600">
-                        Upload a PDF document to begin chatting with it
+                        Upload documents in the Manage Documents page and start chatting
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col flex-1 h-full">
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4  max-h-full">
-                      {messages.map((message) => (
-                        <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`flex max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <div className={`flex-shrink-0 ${message.role === 'user' ? 'ml-3' : 'mr-3'}`}>
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'user'
-                                ? 'bg-blue-600'
-                                : 'bg-gradient-to-r from-purple-600 to-pink-600'
-                                }`}>
-                                {message.role === 'user' ? (
-                                  <User className="h-4 w-4 text-white" />
-                                ) : (
-                                  <Bot className="h-4 w-4 text-white" />
-                                )}
-                              </div>
-                            </div>
-                            <div className={`rounded-lg px-4 py-2 ${message.role === 'user'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-800'
-                              }`}>
-                              <p className="text-sm">{message.content}</p>
-                              <p className={`text-xs mt-1 ${message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
-                                }`}>
-                                {message.timestamp.toLocaleTimeString()}
-                              </p>
-                            </div>
+                  messages.map((message) => (
+                    <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                        <div className={`flex-shrink-0 ${message.role === 'user' ? 'ml-3' : 'mr-3'}`}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${message.role === 'user'
+                            ? 'bg-blue-600'
+                            : 'bg-gradient-to-r from-purple-600 to-pink-600'
+                            }`}>
+                            {message.role === 'user' ? (
+                              <User className="h-4 w-4 text-white" />
+                            ) : (
+                              <Bot className="h-4 w-4 text-white" />
+                            )}
                           </div>
                         </div>
-                      ))}
-
-                      {isLoading && (
-                        <div className="flex justify-start">
-                          <div className="flex">
-                            <div className="mr-3">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center">
-                                <Bot className="h-4 w-4 text-white" />
-                              </div>
+                        <div className={`rounded-lg px-4 py-2 ${message.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-800'
+                          }`}>
+                          {message.role === 'assistant' ? (
+                            <div className="text-sm prose prose-sm max-w-none">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {message.content}
+                              </ReactMarkdown>
                             </div>
-                            <div className="bg-gray-100 rounded-lg px-4 py-2">
-                              <div className="flex items-center space-x-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-gray-600" />
-                                <span className="text-sm text-gray-600">Thinking...</span>
-                              </div>
-                            </div>
-                          </div>
+                          ) : (
+                            <p className="text-sm">{message.content}</p>
+                          )}
+                          <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
+                            }`}>
+                            {message.timestamp.toLocaleTimeString()}
+                          </p>
                         </div>
-                      )}
-
-                      <div ref={messagesEndRef} />
+                      </div>
                     </div>
+                  ))
+                )}
 
-                    {/* Input */}
-                    <div className="border-t p-4">
-                      <form onSubmit={handleSubmit} className="flex space-x-2">
-                        <Input
-                          value={input}
-                          onChange={(e) => setInput(e.target.value)}
-                          placeholder="Ask a question about your PDF..."
-                          className="flex-1"
-                          disabled={isProcessing || isLoading}
-                        />
-                        <Button
-                          type="submit"
-                          disabled={!input.trim() || isProcessing || isLoading}
-                          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-                        >
-                          <Send className="h-4 w-4" />
-                        </Button>
-                      </form>
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="flex">
+                      <div className="mr-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center">
+                          <Bot className="h-4 w-4 text-white" />
+                        </div>
+                      </div>
+                      <div className="bg-gray-100 rounded-lg px-4 py-2">
+                        <div className="flex items-center space-x-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-gray-600" />
+                          <span className="text-sm text-gray-600">Thinking...</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="border-t p-4">
+                <form onSubmit={handleSubmit} className="flex space-x-2">
+                  <Input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Ask a question about your documents..."
+                    className="flex-1"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={!input.trim() || isLoading}
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </form>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

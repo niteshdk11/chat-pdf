@@ -54,16 +54,18 @@ export default function Home() {
               Extract insights, ask questions, and get instant answers from your documents using RAG.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/chat">
+              <Link href="/upload">
                 <Button size="lg" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-6 text-lg">
                   <Upload className="mr-2 h-5 w-5" />
-                  Upload & Chat Now
+                  Manage Documents
                 </Button>
               </Link>
-              <Button variant="outline" size="lg" className="px-8 py-6 text-lg border-2 hover:bg-gray-50">
-                <Sparkles className="mr-2 h-5 w-5" />
-                See Demo
-              </Button>
+              <Link href="/chat">
+                <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-6 text-lg border-2">
+                  <MessageSquare className="mr-2 h-5 w-5" />
+                  Start Chatting
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -178,7 +180,7 @@ export default function Home() {
           </p>
           <Link href="/chat">
             <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-6 text-lg font-semibold">
-              <Upload className="mr-2 h-5 w-5" />
+              <MessageSquare className="mr-2 h-5 w-5" />
               Start Chatting Now
             </Button>
           </Link>

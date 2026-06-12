@@ -2,6 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { embeddingService } from './embedding';
 import { supabaseVectorService } from './supabaseVector';
+import { SYSTEM_PROMPT } from '@/lib/config/systemPrompt';
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat';
@@ -46,11 +47,20 @@ export class RAGService {
       .map((chunk) => chunk.content)
       .join('\n\n---\n\n');
 
-    // Create prompt template
-    const prompt = PromptTemplate.fromTemplate(`
-You are a helpful AI assistant that answers questions based on the provided document context.
-Use only the information from the context to answer the question. If the answer is not in the context, say so.
+    // Create prompt with current date/time
+    const currentDateTime = new Date().toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
 
+    const promptWithTime = SYSTEM_PROMPT.replace('{current_date_time}', currentDateTime);
+
+    const prompt = PromptTemplate.fromTemplate(`
 Context:
 {context}
 
@@ -66,8 +76,11 @@ Answer:
       question: query,
     });
 
+    // Prepend system prompt with date/time
+    const finalPrompt = `${promptWithTime}\n\n${formattedPrompt}`;
+
     // Generate response
-    const response = await this.llm.invoke(formattedPrompt);
+    const response = await this.llm.invoke(finalPrompt);
     const answer = response.content as string;
 
     // Save chat history
@@ -100,11 +113,20 @@ Answer:
       .map((chunk) => chunk.content)
       .join('\n\n---\n\n');
 
-    // Create prompt template
-    const prompt = PromptTemplate.fromTemplate(`
-You are a helpful AI assistant that answers questions based on the provided document context.
-Use only the information from the context to answer the question. If the answer is not in the context, say so.
+    // Create prompt with current date/time
+    const currentDateTime = new Date().toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
 
+    const promptWithTime = SYSTEM_PROMPT.replace('{current_date_time}', currentDateTime);
+
+    const prompt = PromptTemplate.fromTemplate(`
 Context:
 {context}
 
@@ -120,8 +142,11 @@ Answer:
       question: query,
     });
 
+    // Prepend system prompt with date/time
+    const finalPrompt = `${promptWithTime}\n\n${formattedPrompt}`;
+
     // Generate streaming response
-    const stream = await this.llm.stream(formattedPrompt);
+    const stream = await this.llm.stream(finalPrompt);
 
     let fullAnswer = '';
 
