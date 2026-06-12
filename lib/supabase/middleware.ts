@@ -1,37 +1,20 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { verifyToken } from '@/lib/jwt'
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
+  const token = request.cookies.get('auth-token')?.value
+  const response = NextResponse.next({
     request,
   })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              request.cookies.set(name, value)
-              supabaseResponse.cookies.set(name, value, options)
-            })
-          } catch {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
-        },
-      },
+  // Verify JWT token if present
+  if (token) {
+    const payload = verifyToken(token)
+    if (!payload) {
+      // Token is invalid, clear it
+      response.cookies.delete('auth-token')
     }
-  )
+  }
 
-  // IMPORTANT: Avoid writing logic to create user sessions here.
-  // See: https://supabase.com/docs/guides/auth/server-side/nextjs
-
-  return supabaseResponse
+  return response
 }

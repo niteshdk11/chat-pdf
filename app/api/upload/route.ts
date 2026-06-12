@@ -3,15 +3,36 @@ import { createClient } from '@/lib/supabase/server';
 import { parseFile, chunkContent } from '@/lib/services/fileParser';
 import { embeddingService } from '@/lib/services/embedding';
 import { supabaseVectorService } from '@/lib/services/supabaseVector';
+import { verifyToken } from '@/lib/jwt';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    let token = request.cookies.get('auth-token')?.value;
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // If no token in cookie, try to get from Authorization header (for localStorage fallback)
+    if (!token) {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
     }
+
+    console.log('Upload route - Token present:', !!token);
+    console.log('Upload route - All cookies:', request.cookies.getAll());
+
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized - No token found' }, { status: 401 });
+    }
+
+    const payload = verifyToken(token);
+
+    console.log('Upload route - Token payload:', payload);
+
+    if (!payload) {
+      return NextResponse.json({ error: 'Unauthorized - Invalid token' }, { status: 401 });
+    }
+
+    const supabase = await createClient();
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -22,10 +43,11 @@ export async function POST(request: NextRequest) {
 
     // Parse the file
     const parsedContent = await parseFile(file);
+    console.log('Parsed content:', parsedContent.length, 'items');
 
     // Create document record
     const documentId = await supabaseVectorService.createDocument(
-      user.id,
+      payload.userId,
       file.name,
       file.type,
       file.size,
@@ -33,11 +55,15 @@ export async function POST(request: NextRequest) {
     );
 
     // Process chunks and embeddings
-    const chunkSize = 1000;
-    const overlap = 200;
+    const chunkSize = 500;
+    const overlap = 0; // Disable overlap for now
 
     for (const parsed of parsedContent) {
+      console.log('Processing parsed item, content length:', parsed.content.length);
+      console.log('Content type:', typeof parsed.content);
+
       const chunks = chunkContent(parsed.content, chunkSize, overlap);
+      console.log('Generated chunks:', chunks.length);
 
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];

@@ -21,6 +21,7 @@ export class RAGService {
         baseURL: 'https://openrouter.ai/api/v1',
       },
       temperature: 0.7,
+      maxTokens: 1000, // Limit tokens to avoid credit issues
     });
   }
 
@@ -32,6 +33,7 @@ export class RAGService {
     const relevantChunks = await supabaseVectorService.similaritySearch(
       queryEmbedding,
       userId,
+      documentId,
       5
     );
 
@@ -83,6 +85,7 @@ Answer:
     const relevantChunks = await supabaseVectorService.similaritySearch(
       queryEmbedding,
       userId,
+      documentId,
       5
     );
 

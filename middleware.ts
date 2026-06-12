@@ -1,10 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { updateSession } from '@/lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // Temporarily disable Supabase middleware to isolate the localStorage issue
-  return NextResponse.next({
-    request,
-  })
+  return await updateSession(request)
 }
 
 export const config = {

@@ -27,6 +27,7 @@ interface Message {
 
 export default function ChatPage() {
   const [file, setFile] = useState<File | null>(null);
+  const [documentId, setDocumentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -51,8 +52,15 @@ export default function ChatPage() {
       formData.append('file', uploadedFile);
 
       try {
+        const token = localStorage.getItem('auth-token');
+        const headers: HeadersInit = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/upload', {
           method: 'POST',
+          headers,
           body: formData,
         });
 
@@ -60,6 +68,7 @@ export default function ChatPage() {
 
         if (response.ok) {
           setIsProcessing(false);
+          setDocumentId(data.documentId);
           setMessages([{
             id: '1',
             role: 'assistant',
@@ -92,8 +101,15 @@ export default function ChatPage() {
       formData.append('file', droppedFile);
 
       try {
+        const token = localStorage.getItem('auth-token');
+        const headers: HeadersInit = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/upload', {
           method: 'POST',
+          headers,
           body: formData,
         });
 
@@ -101,6 +117,7 @@ export default function ChatPage() {
 
         if (response.ok) {
           setIsProcessing(false);
+          setDocumentId(data.documentId);
           setMessages([{
             id: '1',
             role: 'assistant',
@@ -135,13 +152,20 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
+      const token = localStorage.getItem('auth-token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           message: input,
+          documentId: documentId,
         }),
       });
 
@@ -177,11 +201,13 @@ export default function ChatPage() {
   const clearChat = () => {
     setMessages([]);
     setFile(null);
+    setDocumentId(null);
     setInput('');
   };
 
   const removeFile = () => {
     setFile(null);
+    setDocumentId(null);
     setMessages([]);
   };
 

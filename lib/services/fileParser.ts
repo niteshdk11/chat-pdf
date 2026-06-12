@@ -19,8 +19,14 @@ export async function parsePDF(file: File): Promise<ParsedContent[]> {
   const loader = new PDFLoader(buffer);
   const docs = await loader.load();
 
-  return docs.map((doc, index) => ({
-    content: doc.pageContent,
+  // Limit number of pages to prevent memory issues
+  const maxPages = 50;
+  const limitedDocs = docs.slice(0, maxPages);
+
+  console.log('PDF parsed:', docs.length, 'pages, limited to:', limitedDocs.length);
+
+  return limitedDocs.map((doc, index) => ({
+    content: doc.pageContent || '',
     metadata: {
       fileName: file.name,
       fileType: 'pdf',
@@ -36,7 +42,13 @@ export async function parseCSV(file: File): Promise<ParsedContent[]> {
     skip_empty_lines: true,
   });
 
-  const content = JSON.stringify(records, null, 2);
+  // Limit the number of records to prevent memory issues
+  const maxRecords = 1000;
+  const limitedRecords = records.slice(0, maxRecords);
+
+  const content = JSON.stringify(limitedRecords, null, 2);
+
+  console.log('CSV parsed:', records.length, 'records, limited to:', limitedRecords.length);
 
   return [{
     content,
@@ -57,10 +69,17 @@ export async function parseXLSX(file: File): Promise<ParsedContent[]> {
   workbook.SheetNames.forEach((sheetName) => {
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-    allContent.push(`Sheet: ${sheetName}\n${JSON.stringify(data, null, 2)}`);
+
+    // Limit rows to prevent memory issues
+    const maxRows = 1000;
+    const limitedData = data.slice(0, maxRows);
+
+    allContent.push(`Sheet: ${sheetName}\n${JSON.stringify(limitedData, null, 2)}`);
   });
 
   const content = allContent.join('\n\n');
+
+  console.log('XLSX parsed, sheets:', workbook.SheetNames.length);
 
   return [{
     content,
@@ -113,16 +132,46 @@ export async function parseFile(file: File): Promise<ParsedContent[]> {
 }
 
 export function chunkContent(content: string, chunkSize: number = 1000, overlap: number = 200): string[] {
-  const chunks: string[] = [];
-  let start = 0;
+  try {
+    // Validate inputs
+    if (!content || typeof content !== 'string') {
+      console.error('Invalid content type:', typeof content);
+      return [];
+    }
 
-  while (start < content.length) {
-    const end = Math.min(start + chunkSize, content.length);
-    chunks.push(content.slice(start, end));
-    start = end - overlap;
+    if (content.length === 0) {
+      console.warn('Empty content');
+      return [];
+    }
 
-    if (start >= content.length) break;
+    // Limit content size to prevent memory issues
+    const maxContentLength = 500000; // 500k characters
+    if (content.length > maxContentLength) {
+      console.warn('Content too large, truncating:', content.length);
+      content = content.substring(0, maxContentLength);
+    }
+
+    // Use simple chunking without overlap for now to prevent issues
+    const chunks: string[] = [];
+    const maxChunks = 500;
+
+    for (let i = 0; i < content.length; i += chunkSize) {
+      if (chunks.length >= maxChunks) {
+        console.warn('Reached max chunks limit, stopping');
+        break;
+      }
+
+      const chunk = content.slice(i, i + chunkSize);
+      if (chunk.length > 0) {
+        chunks.push(chunk);
+      }
+    }
+
+    console.log('Chunked content into', chunks.length, 'chunks');
+    return chunks;
+  } catch (error) {
+    console.error('Error in chunkContent:', error);
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    return [];
   }
-
-  return chunks;
 }

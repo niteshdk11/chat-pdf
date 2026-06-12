@@ -3,8 +3,9 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Users table (synced with Supabase Auth)
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
@@ -86,80 +87,58 @@ ALTER TABLE chat_history ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users
 CREATE POLICY "Users can view own profile" ON users
-  FOR SELECT USING (auth.uid() = id);
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can insert own profile" ON users
+  FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Users can update own profile" ON users
-  FOR UPDATE USING (auth.uid() = id);
+  FOR UPDATE USING (true);
 
 -- RLS Policies for documents
 CREATE POLICY "Users can view own documents" ON documents
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING (true);
 
 CREATE POLICY "Users can insert own documents" ON documents
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Users can update own documents" ON documents
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (true);
 
 CREATE POLICY "Users can delete own documents" ON documents
-  FOR DELETE USING (auth.uid() = user_id);
+  FOR DELETE USING (true);
 
 -- RLS Policies for document_chunks
 CREATE POLICY "Users can view chunks from own documents" ON document_chunks
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM documents
-      WHERE documents.id = document_chunks.document_id
-      AND documents.user_id = auth.uid()
-    )
-  );
+  FOR SELECT USING (true);
 
 CREATE POLICY "Users can insert chunks for own documents" ON document_chunks
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM documents
-      WHERE documents.id = document_chunks.document_id
-      AND documents.user_id = auth.uid()
-    )
-  );
+  FOR INSERT WITH CHECK (true);
 
 -- RLS Policies for document_embeddings
 CREATE POLICY "Users can view embeddings from own documents" ON document_embeddings
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM document_chunks
-      JOIN documents ON documents.id = document_chunks.document_id
-      WHERE document_chunks.id = document_embeddings.chunk_id
-      AND documents.user_id = auth.uid()
-    )
-  );
+  FOR SELECT USING (true);
 
 CREATE POLICY "Users can insert embeddings for own documents" ON document_embeddings
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM document_chunks
-      JOIN documents ON documents.id = document_chunks.document_id
-      WHERE document_chunks.id = document_embeddings.chunk_id
-      AND documents.user_id = auth.uid()
-    )
-  );
+  FOR INSERT WITH CHECK (true);
 
 -- RLS Policies for chat_history
 CREATE POLICY "Users can view own chat history" ON chat_history
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING (true);
 
 CREATE POLICY "Users can insert own chat history" ON chat_history
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Users can delete own chat history" ON chat_history
-  FOR DELETE USING (auth.uid() = user_id);
+  FOR DELETE USING (true);
 
 -- Function for similarity search using pgvector
 CREATE OR REPLACE FUNCTION match_documents(
   query_embedding vector(1536),
   match_threshold float DEFAULT 0.5,
   match_count int DEFAULT 5,
-  user_id uuid DEFAULT NULL
+  p_user_id uuid DEFAULT NULL,
+  p_document_id uuid DEFAULT NULL
 )
 RETURNS TABLE (
   id uuid,
@@ -184,7 +163,8 @@ BEGIN
   JOIN document_chunks dc ON de.chunk_id = dc.id
   JOIN documents d ON dc.document_id = d.id
   WHERE
-    (user_id IS NULL OR d.user_id = user_id)
+    (p_user_id IS NULL OR d.user_id = p_user_id)
+    AND (p_document_id IS NULL OR d.id = p_document_id)
     AND 1 - (de.embedding <=> query_embedding) > match_threshold
   ORDER BY
     de.embedding <=> query_embedding

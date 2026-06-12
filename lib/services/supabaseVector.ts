@@ -82,19 +82,31 @@ export class SupabaseVectorService {
     if (error) throw error;
   }
 
-  async similaritySearch(queryEmbedding: number[], userId: string, limit: number = 5): Promise<DocumentChunk[]> {
+  async similaritySearch(queryEmbedding: number[], userId: string, documentId?: string, limit: number = 5): Promise<DocumentChunk[]> {
     const supabase = await this.getClient();
     const embeddingString = `[${queryEmbedding.join(',')}]`;
+
+    console.log('Similarity search - userId:', userId);
+    console.log('Similarity search - documentId:', documentId);
+    console.log('Similarity search - limit:', limit);
+    console.log('Similarity search - embedding string length:', embeddingString.length);
 
     const { data, error } = await supabase
       .rpc('match_documents', {
         query_embedding: embeddingString,
-        match_threshold: 0.5,
+        match_threshold: 0.1, // Lower threshold for testing
         match_count: limit,
-        user_id: userId,
+        p_user_id: userId,
+        p_document_id: documentId || null,
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Similarity search error:', error);
+      throw error;
+    }
+
+    console.log('Similarity search - found chunks:', data?.length || 0);
+    console.log('Similarity search - chunks data:', data);
     return data;
   }
 
